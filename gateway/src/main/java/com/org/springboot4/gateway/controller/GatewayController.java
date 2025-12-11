@@ -53,7 +53,7 @@ public class GatewayController {
 		int index = userServiceCounter.getAndIncrement() % USER_SERVICE_INSTANCES.length;
 		String baseUrl = USER_SERVICE_INSTANCES[index];
 		
-		log.debug("Round-robin: Request routed to {} (index: {}, counter: {})", baseUrl, index, userServiceCounter.get());
+		log.info("Round-robin: Request routed to {} (index: {}, counter: {})", baseUrl, index, userServiceCounter.get());
 		
 		return proxyRequest(exchange, baseUrl, path);
 	}
