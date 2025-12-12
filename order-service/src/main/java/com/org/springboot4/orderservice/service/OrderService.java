@@ -1,5 +1,6 @@
 package com.org.springboot4.orderservice.service;
 
+import com.org.springboot4.events.OrderCanceledEvent;
 import com.org.springboot4.events.OrderCreatedEvent;
 import com.org.springboot4.events.OrderStatus;
 import com.org.springboot4.orderservice.domain.Order;
@@ -69,15 +70,28 @@ public class OrderService {
         log.info("Order confirmed: orderId={}", orderId);
     }
     
-    // Updates order status to CANCELED
+    // Updates order status to CANCELED and publishes OrderCanceledEvent for compensation
     @Transactional
     public void cancelOrder(UUID orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Order not found: " + orderId));
         
+        OrderStatus previousStatus = order.getStatus();
         order.setStatus(OrderStatus.CANCELED);
         orderRepository.save(order);
         log.info("Order canceled: orderId={}", orderId);
+        
+        // Publish OrderCanceledEvent for compensation (release credit in user-service)
+        // Only publish if order was in PENDING or CONFIRMED status (credit was reserved)
+        if (previousStatus == OrderStatus.PENDING || previousStatus == OrderStatus.CONFIRMED) {
+            OrderCanceledEvent canceledEvent = new OrderCanceledEvent(
+                    order.getId(),
+                    order.getUserId(),
+                    order.getAmount()
+            );
+            kafkaTemplate.send("order.canceled", canceledEvent);
+            log.info("Published OrderCanceledEvent for orderId={} (compensation)", orderId);
+        }
     }
 }
 

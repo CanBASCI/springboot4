@@ -48,5 +48,18 @@ public class UserService {
         }
         return false;
     }
+    
+    /**
+     * Releases reserved credit (compensation transaction).
+     * Called when an order is canceled.
+     */
+    @Transactional
+    public void releaseCredit(UUID userId, Long amount) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+        
+        user.setBalance(user.getBalance() + amount);
+        userRepository.save(user);
+    }
 }
 

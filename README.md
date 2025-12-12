@@ -9,9 +9,18 @@ The project consists of:
 - **API Gateway** (port 8080) - Spring WebFlux-based reverse proxy with round-robin load balancing
 - **User Service** (2 instances on ports 8081, 8082) - Manages users and their balances
 - **Order Service** (port 8091) - Manages orders and orchestrates the saga
-- **Event-Driven Saga (Choreography)** - Uses Apache Kafka for asynchronous communication
+- **Event-Driven Saga (Choreography)** - Uses Apache Kafka for asynchronous communication with compensation support
 - **PostgreSQL** - Separate databases for each service
 - **Distributed Tracing** - Micrometer Tracing + Zipkin for end-to-end observability
+
+## Key Highlights
+
+- **Spring Boot 4.0.0 with Spring Framework 7.x** - Latest and greatest!
+- **Reactive Gateway** - Pure WebFlux implementation (no Spring Cloud Gateway dependencies)
+- **Saga Pattern** - Asynchronous event-driven orchestration via Kafka with compensation support
+- **Load Balancing** - Round-robin distribution across user-service instances
+- **End-to-End Tracing** - Track requests across all services with the same traceId
+- **Production-Ready** - Health checks, metrics, migrations, and comprehensive documentation
 
 ## Technology Stack
 
@@ -223,6 +232,8 @@ Once all services are running, you can access:
 
 ## Testing the System
 
+**Important Note**: All IDs (user IDs, order IDs) are auto-generated UUIDs. When you run these examples, you'll get different UUID values. Always use the actual IDs returned in the responses, not the example UUIDs shown in this documentation.
+
 ### Example 1: Create a User
 
 Create a new user with an initial balance:
@@ -239,14 +250,14 @@ curl -X POST http://localhost:8080/users \
 **Expected Response**:
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "id": "{userId}",
   "username": "john_doe",
   "balance": 10000,
   "createdAt": "2024-12-11T22:00:00"
 }
 ```
 
-**Save the `id` value** - you'll need it for creating orders.
+**Important**: Save the actual `id` value from the response (it will be a UUID like `550e8400-e29b-41d4-a716-446655440000`). You'll need this `{userId}` for creating orders in the next steps.
 
 ### Example 2: Get User by ID
 
@@ -257,9 +268,9 @@ Retrieve user information:
 curl http://localhost:8080/users/{userId}
 ```
 
-**Example**:
+**Example** (replace `{userId}` with the actual UUID from Example 1):
 ```bash
-curl http://localhost:8080/users/550e8400-e29b-41d4-a716-446655440000
+curl http://localhost:8080/users/{userId}
 ```
 
 ### Example 3: Create an Order (Starts Saga)
@@ -278,15 +289,15 @@ curl -X POST http://localhost:8080/orders \
 **Expected Response** (initially PENDING):
 ```json
 {
-  "id": "660e8400-e29b-41d4-a716-446655440001",
-  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "id": "{orderId}",
+  "userId": "{userId}",
   "amount": 5000,
   "status": "PENDING",
   "createdAt": "2024-12-11T22:00:05"
 }
 ```
 
-**Save the order `id`** for the next step.
+**Important**: Save the actual order `id` value from the response (it will be a UUID). You'll need this `{orderId}` for checking order status in the next steps.
 
 **What happens behind the scenes**:
 1. Order Service creates order with status `PENDING`
@@ -304,16 +315,16 @@ Wait 2-3 seconds for the saga to complete, then check the order status:
 curl http://localhost:8080/orders/{orderId}
 ```
 
-**Example**:
+**Example** (replace `{orderId}` with the actual order ID from Example 3):
 ```bash
-curl http://localhost:8080/orders/660e8400-e29b-41d4-a716-446655440001
+curl http://localhost:8080/orders/{orderId}
 ```
 
 **Expected Response** (should be CONFIRMED if user had sufficient balance):
 ```json
 {
-  "id": "660e8400-e29b-41d4-a716-446655440001",
-  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "id": "{orderId}",
+  "userId": "{userId}",
   "amount": 5000,
   "status": "CONFIRMED",
   "createdAt": "2024-12-11T22:00:05"
@@ -328,14 +339,133 @@ Create another order with an amount greater than the user's remaining balance:
 curl -X POST http://localhost:8080/orders \
   -H "Content-Type: application/json" \
   -d '{
-    "userId": "550e8400-e29b-41d4-a716-446655440000",
+    "userId": "{userId}",
     "amount": 10000
   }'
 ```
 
+**Note**: Replace `{userId}` with the actual user ID from Example 1.
+
 Wait a few seconds, then check the order status - it should be `CANCELED` because the user doesn't have enough balance (user had 10000, first order used 5000, remaining balance is 5000, but order requested 10000).
 
-### Example 6: Test Round-Robin Load Balancing
+### Example 6: Test Compensation (Order Cancellation)
+
+This example demonstrates the compensation mechanism in the saga pattern. When an order is canceled, the reserved credit is automatically released back to the user.
+
+**Step 1**: Create a user with initial balance:
+```bash
+curl -X POST http://localhost:8080/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "compensation_test",
+    "initialBalance": 10000
+  }'
+```
+
+**Save the `id` value** from the response.
+
+**Step 2**: Check initial balance:
+```bash
+# Replace {userId} with the actual user ID from Step 1
+curl http://localhost:8080/users/{userId}
+```
+
+**Expected Response**:
+```json
+{
+  "id": "{userId}",
+  "username": "compensation_test",
+  "balance": 10000,
+  "createdAt": "2024-12-11T22:00:00"
+}
+```
+
+**Note**: The `id` field will contain an auto-generated UUID. Save this `{userId}` for the next steps.
+
+**Step 3**: Create an order (credit will be reserved):
+```bash
+curl -X POST http://localhost:8080/orders \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "{userId}",
+    "amount": 5000
+  }'
+```
+
+**Note**: Replace `{userId}` with the actual user ID from Step 1.
+
+**Save the order `id`** from the response (it will be a UUID like `{orderId}`).
+
+**Step 4**: Wait 2-3 seconds for credit reservation, then check balance:
+```bash
+curl http://localhost:8080/users/{userId}
+```
+
+**Note**: Replace `{userId}` with the actual user ID from Step 1.
+
+**Expected Response** (balance should be reduced):
+```json
+{
+  "id": "{userId}",
+  "username": "compensation_test",
+  "balance": 5000,
+  "createdAt": "2024-12-11T22:00:00"
+}
+```
+
+**Step 5**: Cancel the order (triggers compensation):
+```bash
+curl -X DELETE http://localhost:8080/orders/{orderId}
+```
+
+**Note**: Replace `{orderId}` with the actual order ID from Step 3.
+
+**Expected Response**: `204 No Content`
+
+**Step 6**: Wait 2-3 seconds for compensation to complete, then check balance again:
+```bash
+curl http://localhost:8080/users/{userId}
+```
+
+**Note**: Replace `{userId}` with the actual user ID from Step 1.
+
+**Expected Response** (balance should be restored):
+```json
+{
+  "id": "{userId}",
+  "username": "compensation_test",
+  "balance": 10000,
+  "createdAt": "2024-12-11T22:00:00"
+}
+```
+
+**Step 7**: Verify order status is CANCELED:
+```bash
+curl http://localhost:8080/orders/{orderId}
+```
+
+**Note**: Replace `{orderId}` with the actual order ID from Step 3.
+
+**Expected Response**:
+```json
+{
+  "id": "{orderId}",
+  "userId": "{userId}",
+  "amount": 5000,
+  "status": "CANCELED",
+  "createdAt": "2024-12-11T22:00:05"
+}
+```
+
+**What happened**:
+1. Order was created and credit was reserved (balance: 10000 → 5000)
+2. Order was canceled via DELETE endpoint
+3. `OrderCanceledEvent` was published to Kafka
+4. User Service received the event and released the credit (compensation)
+5. Balance was restored (5000 → 10000)
+6. Order status changed to `CANCELED`
+
+### Example 7: Test Round-Robin Load Balancing
 
 The gateway distributes requests to user-service instances in a round-robin fashion. Test this:
 
@@ -437,12 +567,14 @@ Content-Type: application/json
 **Response**: `201 Created`
 ```json
 {
-  "id": "uuid",
+  "id": "{userId}",
   "username": "string",
   "balance": 10000,
   "createdAt": "2024-12-11T22:00:00"
 }
 ```
+
+**Note**: The `id` field is an auto-generated UUID. Use the actual value returned in the response.
 
 #### Get User by ID
 ```bash
@@ -452,12 +584,14 @@ GET /users/{id}
 **Response**: `200 OK`
 ```json
 {
-  "id": "uuid",
+  "id": "{userId}",
   "username": "string",
   "balance": 10000,
   "createdAt": "2024-12-11T22:00:00"
 }
 ```
+
+**Note**: Replace `{userId}` in the URL with the actual UUID returned when creating the user.
 
 ### Order Service Endpoints
 
@@ -467,23 +601,27 @@ POST /orders
 Content-Type: application/json
 
 {
-  "userId": "uuid",
+  "userId": "{userId}",
   "amount": 5000
 }
 ```
 
+**Note**: Replace `{userId}` with the actual user UUID from the create user response.
+
 **Response**: `201 Created`
 ```json
 {
-  "id": "uuid",
-  "userId": "uuid",
+  "id": "{orderId}",
+  "userId": "{userId}",
   "amount": 5000,
   "status": "PENDING",
   "createdAt": "2024-12-11T22:00:05"
 }
 ```
 
-**Note**: Status will change to `CONFIRMED` or `CANCELED` after saga completes (2-3 seconds).
+**Note**: 
+- The `id` field is an auto-generated UUID. Use the actual value returned in the response.
+- Status will change to `CONFIRMED` or `CANCELED` after saga completes (2-3 seconds).
 
 #### Get Order by ID
 ```bash
@@ -493,13 +631,30 @@ GET /orders/{id}
 **Response**: `200 OK`
 ```json
 {
-  "id": "uuid",
-  "userId": "uuid",
+  "id": "{orderId}",
+  "userId": "{userId}",
   "amount": 5000,
   "status": "CONFIRMED",
   "createdAt": "2024-12-11T22:00:05"
 }
 ```
+
+**Note**: Replace `{orderId}` in the URL with the actual UUID returned when creating the order.
+
+#### Cancel Order (Compensation)
+```bash
+DELETE /orders/{id}
+```
+
+**Response**: `204 No Content`
+
+**What happens**:
+1. Order status is updated to `CANCELED`
+2. `OrderCanceledEvent` is published to Kafka topic `order.canceled`
+3. User Service receives the event and releases reserved credit (compensation)
+4. User's balance is restored
+
+**Note**: This endpoint triggers the compensation mechanism in the saga pattern. Only orders with status `PENDING` or `CONFIRMED` will trigger compensation (orders that had credit reserved).
 
 ### Health Check Endpoints
 
@@ -547,10 +702,16 @@ The order processing saga follows a **choreography pattern**:
    - On `UserCreditReservedEvent`: updates order status to `CONFIRMED`
    - On `UserCreditReservationFailedEvent`: updates order status to `CANCELED`
 
+4. **Compensation Flow** (when order is canceled):
+   - Order Service receives DELETE request and publishes `OrderCanceledEvent` to `order.canceled`
+   - User Service listens to `order.canceled` and releases reserved credit
+   - User's balance is restored automatically
+
 **Key Points**:
 - All communication is asynchronous via Kafka
 - No direct service-to-service HTTP calls for saga coordination
 - Each service is responsible for its own part of the saga
+- Compensation mechanism ensures data consistency when orders are canceled
 - Distributed tracing tracks the entire flow across services
 
 ## Kafka Topics
@@ -558,6 +719,7 @@ The order processing saga follows a **choreography pattern**:
 The following Kafka topics are used:
 
 - `order.created` - Published by order-service when an order is created
+- `order.canceled` - Published by order-service when an order is canceled (triggers compensation)
 - `user.credit-reserved` - Published by user-service when credit is successfully reserved
 - `user.credit-reservation-failed` - Published by user-service when credit reservation fails
 
