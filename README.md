@@ -54,8 +54,15 @@ Before you begin, ensure you have the following installed on your local machine:
 ### Required Software
 
 1. **Java 21**
-   - Download from: https://adoptium.net/ or https://www.oracle.com/java/technologies/downloads/#java21
-   - Verify installation:
+   - **Eclipse Temurin (Adoptium)** - OpenJDK builds: https://adoptium.net/
+   - **Amazon Corretto** - Amazon's OpenJDK distribution: https://aws.amazon.com/corretto/
+   - **Oracle JDK** - Oracle's official JDK: https://www.oracle.com/java/technologies/downloads/#java21
+   - **Microsoft Build of OpenJDK**: https://www.microsoft.com/openjdk
+   - **Azul Zulu** - OpenJDK builds: https://www.azul.com/downloads/
+   
+   **Recommended**: Eclipse Temurin (Adoptium) or Amazon Corretto for production use.
+   
+   Verify installation:
      ```bash
      java -version
      # Should show: openjdk version "21" or java version "21"
@@ -253,9 +260,11 @@ curl -X POST http://localhost:8080/users \
   "id": "{userId}",
   "username": "john_doe",
   "balance": 10000,
-  "createdAt": "2024-12-11T22:00:00"
+  "createdAt": "2025-12-12T22:00:00"
 }
 ```
+
+**Note**: The `createdAt` field is automatically set to the current date and time when the user is created. The actual value will be the current timestamp in ISO format (e.g., `2025-12-12T22:00:00`).
 
 **Important**: Save the actual `id` value from the response (it will be a UUID like `550e8400-e29b-41d4-a716-446655440000`). You'll need this `{userId}` for creating orders in the next steps.
 
@@ -281,10 +290,12 @@ Create an order to trigger the event-driven saga:
 curl -X POST http://localhost:8080/orders \
   -H "Content-Type: application/json" \
   -d '{
-    "userId": "550e8400-e29b-41d4-a716-446655440000",
+    "userId": "{userId}",
     "amount": 5000
   }'
 ```
+
+**Note**: Replace `{userId}` with the actual user ID from Example 1.
 
 **Expected Response** (initially PENDING):
 ```json
@@ -293,9 +304,11 @@ curl -X POST http://localhost:8080/orders \
   "userId": "{userId}",
   "amount": 5000,
   "status": "PENDING",
-  "createdAt": "2024-12-11T22:00:05"
+  "createdAt": "2025-12-12T22:00:05"
 }
 ```
+
+**Note**: The `createdAt` field is automatically set to the current date and time when the order is created.
 
 **Important**: Save the actual order `id` value from the response (it will be a UUID). You'll need this `{orderId}` for checking order status in the next steps.
 
@@ -327,9 +340,11 @@ curl http://localhost:8080/orders/{orderId}
   "userId": "{userId}",
   "amount": 5000,
   "status": "CONFIRMED",
-  "createdAt": "2024-12-11T22:00:05"
+  "createdAt": "2025-12-12T22:00:05"
 }
 ```
+
+**Note**: The `createdAt` field shows when the order was created (automatically set to current timestamp in ISO format).
 
 ### Example 5: Test Insufficient Balance Scenario
 
@@ -376,11 +391,13 @@ curl http://localhost:8080/users/{userId}
   "id": "{userId}",
   "username": "compensation_test",
   "balance": 10000,
-  "createdAt": "2024-12-11T22:00:00"
+  "createdAt": "2025-12-12T22:00:00"
 }
 ```
 
-**Note**: The `id` field will contain an auto-generated UUID. Save this `{userId}` for the next steps.
+**Note**: 
+- The `id` field will contain an auto-generated UUID. Save this `{userId}` for the next steps.
+- The `createdAt` field is automatically set to the current date and time when the user is created (ISO format timestamp).
 
 **Step 3**: Create an order (credit will be reserved):
 ```bash
@@ -409,9 +426,11 @@ curl http://localhost:8080/users/{userId}
   "id": "{userId}",
   "username": "compensation_test",
   "balance": 5000,
-  "createdAt": "2024-12-11T22:00:00"
+  "createdAt": "2025-12-12T22:00:00"
 }
 ```
+
+**Note**: The `createdAt` field shows when the user was created (automatically set to current timestamp in ISO format).
 
 **Step 5**: Cancel the order (triggers compensation):
 ```bash
@@ -435,9 +454,11 @@ curl http://localhost:8080/users/{userId}
   "id": "{userId}",
   "username": "compensation_test",
   "balance": 10000,
-  "createdAt": "2024-12-11T22:00:00"
+  "createdAt": "2025-12-12T22:00:00"
 }
 ```
+
+**Note**: The `createdAt` field shows when the user was created (automatically set to current timestamp in ISO format).
 
 **Step 7**: Verify order status is CANCELED:
 ```bash
@@ -453,9 +474,11 @@ curl http://localhost:8080/orders/{orderId}
   "userId": "{userId}",
   "amount": 5000,
   "status": "CANCELED",
-  "createdAt": "2024-12-11T22:00:05"
+  "createdAt": "2025-12-12T22:00:05"
 }
 ```
+
+**Note**: The `createdAt` field shows when the order was created (automatically set to current timestamp in ISO format).
 
 **What happened**:
 1. Order was created and credit was reserved (balance: 10000 → 5000)
@@ -570,11 +593,13 @@ Content-Type: application/json
   "id": "{userId}",
   "username": "string",
   "balance": 10000,
-  "createdAt": "2024-12-11T22:00:00"
+  "createdAt": "2025-12-12T22:00:00"
 }
 ```
 
-**Note**: The `id` field is an auto-generated UUID. Use the actual value returned in the response.
+**Note**: 
+- The `id` field is an auto-generated UUID. Use the actual value returned in the response.
+- The `createdAt` field is automatically set to the current date and time when the user is created (ISO format timestamp).
 
 #### Get User by ID
 ```bash
@@ -587,11 +612,13 @@ GET /users/{id}
   "id": "{userId}",
   "username": "string",
   "balance": 10000,
-  "createdAt": "2024-12-11T22:00:00"
+  "createdAt": "2025-12-12T22:00:00"
 }
 ```
 
-**Note**: Replace `{userId}` in the URL with the actual UUID returned when creating the user.
+**Note**: 
+- Replace `{userId}` in the URL with the actual UUID returned when creating the user.
+- The `createdAt` field shows when the user was created (automatically set to current timestamp in ISO format).
 
 ### Order Service Endpoints
 
@@ -615,12 +642,13 @@ Content-Type: application/json
   "userId": "{userId}",
   "amount": 5000,
   "status": "PENDING",
-  "createdAt": "2024-12-11T22:00:05"
+  "createdAt": "2025-12-12T22:00:05"
 }
 ```
 
 **Note**: 
 - The `id` field is an auto-generated UUID. Use the actual value returned in the response.
+- The `createdAt` field is automatically set to the current date and time when the order is created (ISO format timestamp).
 - Status will change to `CONFIRMED` or `CANCELED` after saga completes (2-3 seconds).
 
 #### Get Order by ID
@@ -635,11 +663,13 @@ GET /orders/{id}
   "userId": "{userId}",
   "amount": 5000,
   "status": "CONFIRMED",
-  "createdAt": "2024-12-11T22:00:05"
+  "createdAt": "2025-12-12T22:00:05"
 }
 ```
 
-**Note**: Replace `{orderId}` in the URL with the actual UUID returned when creating the order.
+**Note**: 
+- Replace `{orderId}` in the URL with the actual UUID returned when creating the order.
+- The `createdAt` field shows when the order was created (automatically set to current timestamp in ISO format).
 
 #### Cancel Order (Compensation)
 ```bash
@@ -988,7 +1018,7 @@ All services are configured with:
 
 **Log format** includes `traceId` and `spanId`:
 ```
-2024-12-11 22:00:00.000  INFO [gateway,abc123def456,xyz789] ... - Message
+2025-12-12 22:00:00.000  INFO [gateway,abc123def456,xyz789] ... - Message
 ```
 
 **Trace ID** is the same across all services for a single transaction, allowing you to track a request from gateway through all downstream services.
